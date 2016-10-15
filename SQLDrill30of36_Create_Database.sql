@@ -1,13 +1,9 @@
 USE master
 GO
 
-ALTER DATABASE [yourdbname] SET  SINGLE_USER WITH ROLLBACK IMMEDIATE
-GO
-
-USE master
-GO
-
 IF EXISTS(SELECT * FROM sys.databases WHERE Name = 'LibraryManagementSystem')
+	ALTER DATABASE LibraryManagementSystem SET  SINGLE_USER WITH ROLLBACK IMMEDIATE
+	GO
 	DROP DATABASE LibraryManagementSystem
 GO
 
