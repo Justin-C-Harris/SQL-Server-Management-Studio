@@ -20,7 +20,7 @@ CREATE TABLE BOOK
 	[Title] NVARCHAR(255),
 	[PublisherName] NVARCHAR(255)
 
-	CONSTRAINT PK_BOOK PRIMARY KEY NONCLUSTERED ([BookID])
+	CONSTRAINT PK_BOOK PRIMARY KEY CLUSTERED ([BookID])
 )
 
 CREATE TABLE BOOK_AUTHORS
@@ -28,7 +28,7 @@ CREATE TABLE BOOK_AUTHORS
 	[BookID] INT NOT NULL,
 	[AuthorName] NVARCHAR(255)
 
-	CONSTRAINT PK_BOOK_AUTHORS PRIMARY KEY NONCLUSTERED ([BookID], [AuthorName])
+	CONSTRAINT PK_BOOK_AUTHORS PRIMARY KEY CLUSTERED ([BookID], [AuthorName])
 	CONSTRAINT FK_BOOK_AUTHORS_BOOK FOREIGN KEY ([BookID]) REFERENCES BOOK ([BookID])
 )
 
@@ -38,7 +38,7 @@ CREATE TABLE PUBLISHER
 	[Address] NVARCHAR(255),
 	[Phone] NVARCHAR(255)
 
-	CONSTRAINT PK_PUBLISHER PRIMARY KEY NONCLUSTERED ([Name])
+	CONSTRAINT PK_PUBLISHER PRIMARY KEY CLUSTERED ([Name])
 )
 
 ALTER TABLE BOOK
@@ -52,7 +52,7 @@ CREATE TABLE BOOK_COPIES
 	[BranchID] INT NOT NULL,
 	[No_Of_Copies] INT NOT NULL
 	
-	CONSTRAINT PK_BOOK_COPIES PRIMARY KEY NONCLUSTERED ([BookID], [BranchID])
+	CONSTRAINT PK_BOOK_COPIES PRIMARY KEY CLUSTERED ([BookID], [BranchID])
 	CONSTRAINT FK_BOOK_COPIES_BOOK FOREIGN KEY ([BookID]) REFERENCES BOOK ([BookID])
 )
 
@@ -62,7 +62,7 @@ CREATE TABLE LIBRARY_BRANCH
 	[BranchName] NVARCHAR(255),
 	[Address] NVARCHAR(255)
 
-	CONSTRAINT PK_LIBRARY_BRACH PRIMARY KEY NONCLUSTERED ([BranchID])
+	CONSTRAINT PK_LIBRARY_BRACH PRIMARY KEY CLUSTERED ([BranchID])
 )
 
 ALTER TABLE BOOK_COPIES
@@ -77,7 +77,7 @@ CREATE TABLE BORROWER
 	[Address] NVARCHAR(255),
 	[Phone] NVARCHAR(22)
 
-	CONSTRAINT PK_BORROWER PRIMARY KEY NONCLUSTERED ([CardNo])
+	CONSTRAINT PK_BORROWER PRIMARY KEY CLUSTERED ([CardNo])
 )
 
 CREATE TABLE BOOK_LOANS
@@ -88,7 +88,7 @@ CREATE TABLE BOOK_LOANS
 	[DateOut] DATE NOT NULL DEFAULT GETDATE(),
 	[DueDate] DATE NOT NULL DEFAULT DATEADD(day, 10, GETDATE()),
 
-	CONSTRAINT PK_BOOK_LOANS PRIMARY KEY NONCLUSTERED ([BookID], [BranchID], [CardNo]),
+	CONSTRAINT PK_BOOK_LOANS PRIMARY KEY CLUSTERED ([BookID], [BranchID], [CardNo]),
 	CONSTRAINT FK_BOOK_LOANS_LIBRARY_BRANCH FOREIGN KEY ([BranchID]) REFERENCES LIBRARY_BRANCH ([BranchID]),
 	CONSTRAINT FK_BOOK_LOANS_BORROWER FOREIGN KEY ([CardNo]) REFERENCES BORROWER ([CardNo]),
 	CONSTRAINT FK_BOOK_LOANS_BOOK FOREIGN KEY ([BookID]) REFERENCES BOOK ([BookID])
@@ -200,3 +200,94 @@ VALUES
 UPDATE dbo.BOOK_LOANS
 SET DueDate = GETDATE()
 WHERE BookID = 1 AND BranchID = 1 AND CardNo = 1;
+
+USE [LibraryManagementSystem]
+GO
+
+/*
+This creates the procedure which is called uspChooseQuery that allows the user to choose the query they would like to run via the
+@Choose_Query parameter. The user will set the @Choose_Query parameter to a integer between 1 and 7 to select the query that would
+like to run. The default integer for @Choose_Query is set to 1.
+*/
+
+IF OBJECT_ID('uspChooseQuery') IS NOT NULL
+	DROP PROCEDURE uspChooseQuery
+GO
+
+CREATE PROCEDURE uspChooseQuery (@Choose_Query INT = 1)
+AS
+
+IF (@Choose_Query = 1)
+/*1. How many copies of the book titled The Lost Tribe are owned by the library branch whose name
+is"Sharpstown"?*/
+SELECT LB.BranchName, B.Title, BC.No_Of_Copies
+FROM dbo.BOOK_COPIES AS BC JOIN dbo.LIBRARY_BRANCH AS LB
+ON BC.BranchID = LB.BranchID
+JOIN dbo.BOOK AS B
+ON BC.BookID = B.BookID
+WHERE B.Title = 'The Lost Tribe' AND LB.BranchName = 'Sharpstown';
+
+ELSE IF (@Choose_Query = 2)
+/*2. How many copies of the book titled The Lost Tribe are owned by each library branch?*/
+SELECT B.Title, LB.BranchName, BC.No_Of_Copies
+FROM dbo.BOOK AS B JOIN dbo.BOOK_COPIES AS BC
+ON B.BookID = BC.BookID
+JOIN dbo.LIBRARY_BRANCH AS LB
+ON BC.BranchID = LB.BranchID
+WHERE B.Title = 'The Lost Tribe';
+
+ELSE IF (@Choose_Query = 3)
+/*3. Retrieve the names of all borrowers who do not have any books checked out.*/
+SELECT BO.Name, COUNT(BL.CardNo) AS 'Number of Books Checked Out'
+FROM dbo.BOOK_LOANS AS BL RIGHT JOIN dbo.BORROWER AS BO
+ON BL.CardNo = BO.CardNo
+WHERE BL.BookID IS NULL
+GROUP BY BO.Name;
+
+ELSE IF (@Choose_Query = 4)
+/*4. For each book that is loaned out from the "Sharpstown" branch and whose DueDate is today,
+retrieve the book title, the borrower's name, and the borrower's address.*/
+SELECT B.Title, BO.Name, BO.Address
+FROM dbo.BOOK_LOANS AS BL JOIN dbo.BORROWER AS BO
+ON BL.CardNo = BO.CardNo
+JOIN dbo.BOOK AS B
+ON BL.BookID = B.BookID
+JOIN dbo.LIBRARY_BRANCH AS LB
+ON BL.BranchID = LB.BranchID
+WHERE BL.DueDate = DATEADD(dd, 0, DATEDIFF(dd, 0, GETDATE())) AND LB.BranchName = 'Sharpstown';
+
+ELSE IF (@Choose_Query = 5)
+/*5. For each library branch, retrieve the branch name and the total number of books loaned out from
+that branch.*/
+SELECT LB.BranchName AS 'Branch Name', COUNT(BL.BranchID) AS 'Number of Books Loaned Out'
+FROM dbo.BOOK_LOANS AS BL RIGHT JOIN dbo.LIBRARY_BRANCH AS LB
+ON BL.BranchID = LB.BranchID
+GROUP BY LB.BranchName, LB.BranchID
+ORDER BY LB.BranchID;
+
+ELSE IF (@Choose_Query = 6)
+/*6. Retrieve the names, addresses, and number of books checked out for all borrowers who have more
+than five books checked out.*/
+SELECT BO.Name, BO.Address, COUNT(BL.CardNo) AS 'Books Checked Out'
+FROM dbo.BOOK_LOANS AS BL JOIN dbo.BORROWER AS BO
+ON BL.CardNo = BO.CardNo
+GROUP BY BO.Name, BO.Address, BO.CardNo
+HAVING COUNT(BL.CardNo) > 5
+ORDER BY BO.CardNo;
+
+ELSE IF (@Choose_Query = 7)
+/*7. For each book authored (or co-authored) by "Stephen King", retrieve the title and the number of
+copies owned by the library branch whose name is "Central"*/
+SELECT B.Title AS 'Book Title', BA.AuthorName AS 'Book Author', LB.BranchName AS 'Library Branch Name', BC.No_Of_Copies AS 'Number of Copies Owned by Library Branch'
+FROM BOOK AS B JOIN dbo.BOOK_COPIES AS BC
+ON B.BookID = BC.BookID
+JOIN dbo.LIBRARY_BRANCH AS LB
+ON BC.BranchID = LB.BranchID
+JOIN dbo.BOOK_AUTHORS AS BA
+ON B.BookID = BA.BookID
+WHERE BA.AuthorName = 'Stephen King' AND lb.BranchName = 'Central';
+
+ELSE
+PRINT 'You need to set @Choose_Query to an integer between 1 and 7 in order to choose one of the seven possible SELECT query
+statements. If you select an integer outside of that range you will get this message. The default integer for @Choose_Query
+is set to 1.'
